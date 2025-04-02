@@ -35,6 +35,11 @@ class SyncIssueDetector(ast.NodeVisitor):
                 self.current_locks.discard(obj_name)
         self.generic_visit(node)
     
+    def detect_deadlock(self, lock_name):
+        for acquired_lock in self.locks:
+            if acquired_lock != lock_name:
+                self.deadlock_pairs.add((acquired_lock, lock_name))
+    
 def analyze_code(file_path):
     with open(file_path, "r") as source_file:
         tree = ast.parse(source_file.read())
