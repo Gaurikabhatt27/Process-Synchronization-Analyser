@@ -35,7 +35,7 @@ class SyncIssueDetector(ast.NodeVisitor):
                 self.current_locks.discard(obj_name)
         self.generic_visit(node)
     
-    def detect_deadlock(self, lock_name):
+    def detect_deadlock(self, lock_name):  #This is deadlock detection function
         for acquired_lock in self.locks:
             if acquired_lock != lock_name:
                 self.deadlock_pairs.add((acquired_lock, lock_name))
@@ -64,7 +64,7 @@ def analyze_code(file_path):
     detector.visit(tree)
     detector.report_issues()
 
-if __name__ == "_main_":
+if __name__ == "_main_":            #This is main function
     if len(sys.argv) != 2:
         print("Usage: python static_code_analyzer.py <source_code.py>")
         sys.exit(1)
