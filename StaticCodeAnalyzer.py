@@ -40,11 +40,29 @@ class SyncIssueDetector(ast.NodeVisitor):
             if acquired_lock != lock_name:
                 self.deadlock_pairs.add((acquired_lock, lock_name))
     
+    def report_issues(self):
+        print("Potential Synchronization Issues Detected:")
+        
+        for var, accesses in self.shared_resources.items():
+            if len(accesses) >= 1:
+                print(f"- Shared resource '{var}' accessed at {accesses} without synchronization.")
+        
+        for lock, locations in self.lock_acquires.items():
+            if lock not in self.lock_releases:
+                print(f"- Lock '{lock}' acquired but never released at {locations}.")
+        
+        if self.deadlock_pairs:
+            print("- Potential Deadlocks Detected: Circular wait conditions found:")
+            for pair in self.deadlock_pairs:
+                print(f"  - {pair}")
+
+
 def analyze_code(file_path):
     with open(file_path, "r") as source_file:
         tree = ast.parse(source_file.read())
     detector = SyncIssueDetector()
     detector.visit(tree)
+    detector.report_issues()
 
 if __name__ == "_main_":
     if len(sys.argv) != 2:
