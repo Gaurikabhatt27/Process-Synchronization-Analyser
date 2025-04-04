@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Deadlock Visualization Dashboard</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        /* ====== ROOT & GLOBAL STYLES ====== */
+        :root {
+            --primary: #4361ee;
+            --primary-dark: #3f37c9;
+            --accent: #4895ef;
+            --danger: #f72585;
+            --success: #4cc9f0;
+            --light: #f8f9fa;
+            --dark: #212529;
+            --border-radius: 10px;
+            --box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            color: var(--dark);
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto 1fr 1fr auto;
+            gap: 20px;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        /* ====== HEADER & CONTROLS ====== */
+        header {
+            grid-column: 1 / -1;
+            background: white;
+            padding: 20px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+        }
+
+        #controls {
+            display: flex;
+            gap: 20px;
+            align-items: flex-end;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label {
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        input {
+            padding: 8px 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 5px;
+            width: 80px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: var(--primary-dark);
+        }
+
+        /* ====== MAIN GRID SECTIONS ====== */
+        .panel {
+            background: white;
+            padding: 20px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #graph-container {
+            grid-row: 2 / 4;
+            min-height: 600px;
+        }
+
+        #graph-container svg {
+            width: 100%;
+            height: 100%;
+            border: 1px solid #eee;
+            border-radius: 5px;
+        }
+
+        #timeline {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        #deadlock-info {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        #solutions {
+            grid-column: 1 / -1;
+            background: white;
+            padding: 20px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            overflow: hidden;
+        }
+
+        /* ====== NEW TWO-COLUMN LAYOUT FOR SOLUTIONS ====== */
+        #solutions-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .solutions-column {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        /* ====== VISUALIZATION STYLES ====== */
+        .thread-node {
+            fill: var(--primary);
+            stroke: var(--primary-dark);
+        }
+
+        .resource-node {
+            fill: var(--success);
+            stroke: var(--accent);
+        }
+
+        .normal-link {
+            stroke: var(--primary);
+            stroke-width: 2;
+        }
+
+        .deadlock-link {
+            stroke: var(--danger);
+            stroke-width: 3;
+            stroke-dasharray: 5,3;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% { stroke-opacity: 0.7; }
+            50% { stroke-opacity: 1; }
+            100% { stroke-opacity: 0.7; }
+        }
+
+        /* ====== TIMELINE TABLE ====== */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th {
+            background: var(--primary);
+            color: white;
+            padding: 10px;
+            text-align: left;
+            position: sticky;
+            top: 0;
+        }
+
+        td {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .deadlock-event {
+            color: var(--danger);
+            font-weight: bold;
+        }
+
+        /* ====== DEADLOCK INFO ====== */
+        .deadlock-alert {
+            color: var(--danger);
+            font-weight: bold;
+            margin-bottom: 10px;
+            padding: 10px;
+            background: rgba(247, 37, 133, 0.1);
+            border-radius: 5px;
+        }
+
+        .deadlock-cycle {
+            margin: 10px 0;
+            font-family: monospace;
+        }
+
+        /* ====== SOLUTIONS SECTION ====== */
+        .solution {
+            background: rgba(72, 149, 239, 0.1);
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            border-left: 4px solid var(--accent);
+        }
+
+        .solution h3 {
+            margin-bottom: 10px;
+            color: var(--primary);
+        }
+
+        .solution-code {
+            font-family: 'Courier New', monospace;
+            background: rgba(0,0,0,0.05);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 13px;
+            margin: 10px 0;
+            overflow-x: auto;
+            white-space: pre;
+        }
+
+        .try-solution {
+            background: var(--accent);
+            margin-top: 10px;
+        }
+
+        .try-solution:hover {
+            background: #3a7bc8;
+        }
+    </style>
+</head>
+<body>
+    <!-- ===== HEADER SECTION ===== -->
+    <header>
+        <h1>Deadlock Visualization Dashboard</h1>
+        <div id="controls">
+            <div class="input-group">
+                <label for="thread-count">Number of Threads:</label>
+                <input type="number" id="thread-count" min="1" max="10" value="2">
+            </div>
+            <div class="input-group">
+                <label for="resource-count">Number of Resources:</label>
+                <input type="number" id="resource-count" min="1" max="10" value="2">
+            </div>
+            <button id="simulate-btn">Simulate Deadlock</button>
+        </div>
+    </header>
+
+    <!-- ===== MAIN CONTENT SECTIONS ===== -->
+    <div id="graph-container" class="panel">
+        <h2>Resource Allocation Graph</h2>
+        <svg></svg>
+    </div>
+
+    <div id="timeline" class="panel">
+        <h2>Timeline Events</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Event</th>
+                </tr>
+            </thead>
+            <tbody id="timeline-body"></tbody>
+        </table>
+    </div>
+
+    <div id="deadlock-info" class="panel">
+        <h2>Deadlock Details</h2>
+        <div id="deadlock-details"></div>
+    </div>
+
+    <div id="solutions" class="panel">
+        <h2>Potential Solutions</h2>
+        <div id="solutions-container">
+            <div class="solutions-column" id="solutions-col1"></div>
+            <div class="solutions-column" id="solutions-col2"></div>
+        </div>
+    </div>
+
+    <script>
+        // ====== INITIALIZATION ======
+        const svg = d3.select("#graph-container svg");
+        const width = document.getElementById("graph-container").clientWidth;
+        const height = document.getElementById("graph-container").clientHeight;
+        
+        // Set up arrow markers for graph edges
+        svg.append("defs").append("marker")
+            .attr("id", "arrowhead")
+            .attr("viewBox", "0 -5 10 10")
+            .attr("refX", 25)
+            .attr("markerWidth", 6)
+            .attr("markerHeight", 6)
+            .attr("orient", "auto")
+            .append("path")
+            .attr("d", "M0,-5L10,0L0,5")
+            .attr("fill", "#999");
+
+        // ====== SIMULATION FUNCTION ======
+        function simulateDeadlock() {
+            const threadCount = parseInt(document.getElementById("thread-count").value);
+            const resourceCount = parseInt(document.getElementById("resource-count").value);
+            
+            // Clear previous data
+            document.getElementById("timeline-body").innerHTML = "";
+            document.getElementById("deadlock-details").innerHTML = "";
+            document.getElementById("solutions-col1").innerHTML = "";
+            document.getElementById("solutions-col2").innerHTML = "";
+            svg.selectAll("*").remove();
+            
+            // Create nodes (threads + resources)
+            const nodes = [
+                ...Array.from({length: threadCount}, (_, i) => ({ 
+                    id: `T${i+1}`, 
+                    type: 'thread' 
+                })),
+                ...Array.from({length: resourceCount}, (_, i) => ({ 
+                    id: `R${i+1}`, 
+                    type: 'resource' 
+                }))
+            ];
+            
+            // Create connections and timeline events
+            const links = [];
+            const timelineEvents = [];
+            const allocations = {};
+            const requests = {};
+            let timeCounter = 0;
+            
+            // Each thread holds one resource and requests another
+            for (let i = 0; i < threadCount; i++) {
+                const thread = `T${i+1}`;
+                const hold = `R${1 + Math.floor(Math.random() * resourceCount)}`;
+                let request = `R${1 + Math.floor(Math.random() * resourceCount)}`;
+                
+                // Ensure we don't request the same resource we're holding
+                while (request === hold && resourceCount > 1) {
+                    request = `R${1 + Math.floor(Math.random() * resourceCount)}`;
+                }
+                
+                allocations[thread] = hold;
+                requests[thread] = request;
+                
+                // Add to timeline
+                timelineEvents.push({
+                    time: ++timeCounter,
+                    event: `Thread ${thread} acquired ${hold}`,
+                    isDeadlock: false
+                });
+                timelineEvents.push({
+                    time: ++timeCounter,
+                    event: `Thread ${thread} requested ${request}`,
+                    isDeadlock: false
+                });
+                
+                // Create graph links
+                links.push({ 
+                    source: hold, 
+                    target: thread, 
+                    type: 'hold' 
+                });
+                links.push({ 
+                    source: thread, 
+                    target: request, 
+                    type: 'request' 
+                });
+            }
+            
+            // Detect deadlocks (cycle detection)
+            const deadlocks = detectDeadlocks(threadCount, resourceCount, allocations, requests);
+            
+            if (deadlocks.length > 0) {
+                timelineEvents.push({
+                    time: ++timeCounter,
+                    event: "DEADLOCK DETECTED",
+                    isDeadlock: true
+                });
+            }
+            
+            // ====== VISUALIZATION ======
+            // Position nodes in concentric circles
+            const nodePositions = {};
+            const center = { x: width/2, y: height/2 };
+            const radius = Math.min(width, height) * 0.4;
+            
+            // Position threads on outer circle
+            nodes.filter(n => n.type === 'thread').forEach((node, i) => {
+                const angle = (i / threadCount) * Math.PI * 2;
+                nodePositions[node.id] = {
+                    x: center.x + radius * Math.cos(angle),
+                    y: center.y + radius * Math.sin(angle)
+                };
+            });
+            
+            // Position resources on inner circle
+            nodes.filter(n => n.type === 'resource').forEach((node, i) => {
+                const angle = (i / resourceCount) * Math.PI * 2;
+                nodePositions[node.id] = {
+                    x: center.x + (radius * 0.6) * Math.cos(angle),
+                    y: center.y + (radius * 0.6) * Math.sin(angle)
+                };
+            });
+            
+            // Draw deadlock cycles first (background)
+            deadlocks.forEach(deadlock => {
+                const points = deadlock.cycle.map(node => [
+                    nodePositions[node].x,
+                    nodePositions[node].y
+                ]);
+                
+                const line = d3.line().curve(d3.curveCatmullRomClosed);
+                svg.append("path")
+                    .attr("d", line(points))
+                    .attr("class", "deadlock-link")
+                    .attr("fill", "none");
+            });
+            
+            // Draw connections between nodes
+            links.forEach(link => {
+                const isDeadlock = deadlocks.some(d => 
+                    d.cycle.includes(link.source) && 
+                    d.cycle.includes(link.target)
+                );
+                
+                svg.append("line")
+                    .attr("class", isDeadlock ? "deadlock-link" : "normal-link")
+                    .attr("x1", nodePositions[link.source].x)
+                    .attr("y1", nodePositions[link.source].y)
+                    .attr("x2", nodePositions[link.target].x)
+                    .attr("y2", nodePositions[link.target].y)
+                    .attr("marker-end", link.type === 'request' ? "url(#arrowhead)" : null);
+            });
+            
+            // Draw nodes (threads and resources)
+            nodes.forEach(node => {
+                const group = svg.append("g")
+                    .attr("transform", `translate(${nodePositions[node.id].x}, ${nodePositions[node.id].y})`);
+                
+                group.append("circle")
+                    .attr("r", 20)
+                    .attr("class", `${node.type}-node`);
+                
+                group.append("text")
+                    .attr("text-anchor", "middle")
+                    .attr("dy", 5)
+                    .text(node.id);
+            });
+            
+            // ====== UPDATE TIMELINE ======
+            const timelineBody = document.getElementById("timeline-body");
+            timelineEvents.forEach(event => {
+                const row = timelineBody.insertRow();
+                const timeCell = row.insertCell(0);
+                const eventCell = row.insertCell(1);
+                timeCell.textContent = event.time;
+                eventCell.textContent = event.event;
+                
+                if (event.isDeadlock) {
+                    row.classList.add("deadlock-event");
+                }
+            });
+            
+            // ====== UPDATE DEADLOCK INFO ======
+            const deadlockInfo = document.getElementById("deadlock-details");
+            if (deadlocks.length > 0) {
+                deadlocks.forEach(deadlock => {
+                    const alertDiv = document.createElement("div");
+                    alertDiv.className = "deadlock-alert";
+                    alertDiv.textContent = "⚠️ " + deadlock.description;
+                    deadlockInfo.appendChild(alertDiv);
+                    
+                    const codeDiv = document.createElement("pre");
+                    codeDiv.className = "solution-code";
+                    codeDiv.textContent = deadlock.code;
+                    deadlockInfo.appendChild(codeDiv);
+                    
+                    const cycleDiv = document.createElement("div");
+                    cycleDiv.className = "deadlock-cycle";
+                    cycleDiv.textContent = `Cycle: ${deadlock.cycle.join(" → ")}`;
+                    deadlockInfo.appendChild(cycleDiv);
+                });
+            } else {
+                deadlockInfo.textContent = "No deadlocks detected in this scenario";
+            }
+            
+            // ====== UPDATE SOLUTIONS ======
+            const solutionsCol1 = document.getElementById("solutions-col1");
+            const solutionsCol2 = document.getElementById("solutions-col2");
+            
+            // Only show solutions if deadlocks were detected
+            if (deadlocks.length > 0) {
+                // Create solutions array
+                const solutions = [];
+                
+                // Add resource ordering solution
+                solutions.push({
+                    title: "Resource Ordering",
+                    description: "Force all threads to request resources in a consistent global order.",
+                    code: `// Define global order: R1 → R2 → R3
+function requestResources() {
+    const resources = [R1, R2, R3].sort();
+    for (const res of resources) {
+        res.lock();
+    }
+}`
+                });
+                
+                // Add timeout solution
+                solutions.push({
+                    title: "Timeout with Backoff",
+                    description: "Add timeouts to resource requests with exponential backoff.",
+                    code: `function acquireWithTimeout(resource) {
+    const start = Date.now();
+    while (!resource.tryLock(100)) {
+        if (Date.now() - start > 500) {
+            releaseAll();
+            return false;
+        }
+        sleep(randomBackoff());
+    }
+    return true;
+}`
+                });
+                
+                // Add deadlock detection for complex scenarios
+                if (threadCount >= 3 && resourceCount >= 3) {
+                    solutions.push({
+                        title: "Deadlock Detection",
+                        description: "Periodically check for deadlocks and recover.",
+                        code: `function deadlockDetector() {
+    while (true) {
+        if (detectDeadlock()) {
+            selectVictim().interrupt();
+        }
+        sleep(5000);
+    }
+}`
+                    });
+                }
+                
+                // Add banker's algorithm for resource allocation scenarios
+                if (resourceCount > 2) {
+                    solutions.push({
+                        title: "Banker's Algorithm",
+                        description: "Use resource allocation graph to avoid unsafe states.",
+                        code: `class BankersAlgorithm {
+    constructor(available, max, allocation) {
+        this.available = available;
+        this.max = max;
+        this.allocation = allocation;
+    }
+    
+    isSafe() {
+        // Implementation of safety algorithm
+        return true;
+    }
+}`
+                    });
+                }
+                
+                // Distribute solutions between columns
+                solutions.forEach((solution, index) => {
+                    const solutionDiv = document.createElement("div");
+                    solutionDiv.className = "solution";
+                    solutionDiv.innerHTML = `
+                        <h3>${solution.title}</h3>
+                        <p>${solution.description}</p>
+                        <div class="solution-code">${solution.code}</div>
+                        <button class="try-solution">Try This Solution</button>
+                    `;
+                    
+                    // Alternate between columns
+                    if (index % 2 === 0) {
+                        solutionsCol1.appendChild(solutionDiv);
+                    } else {
+                        solutionsCol2.appendChild(solutionDiv);
+                    }
+                });
+                
+                // Add event listeners to new solution buttons
+                document.querySelectorAll(".try-solution").forEach(button => {
+                    button.addEventListener("click", function() {
+                        const solution = this.parentElement.querySelector("h3").textContent;
+                        alert(`Simulating solution: ${solution}`);
+                        
+                        // Visual feedback
+                        if (solution.includes("Ordering")) {
+                            d3.selectAll(".deadlock-link")
+                                .transition()
+                                .duration(1000)
+                                .style("stroke", "var(--success)");
+                        } else if (solution.includes("Timeout")) {
+                            d3.selectAll(".deadlock-link")
+                                .transition()
+                                .style("stroke-dasharray", "0,0")
+                                .transition()
+                                .delay(1000)
+                                .style("opacity", 0);
+                        } else if (solution.includes("Detection")) {
+                            d3.selectAll(".deadlock-link")
+                                .transition()
+                                .style("stroke-width", 6)
+                                .transition()
+                                .delay(1000)
+                                .style("stroke-width", 2);
+                        } else if (solution.includes("Banker")) {
+                            d3.selectAll("circle")
+                                .transition()
+                                .style("fill", "var(--success)")
+                                .transition()
+                                .delay(1000)
+                                .style("fill", d => d.type === 'thread' ? "var(--primary)" : "var(--success)");
+                        }
+                    });
+                });
+            } else {
+                const noSolutions = document.createElement("div");
+                noSolutions.textContent = "No solutions needed - no deadlock detected";
+                solutionsCol1.appendChild(noSolutions);
+            }
+        }
+        
+        // ====== DEADLOCK DETECTION ======
+        function detectDeadlocks(threadCount, resourceCount, allocations, requests) {
+            const deadlocks = [];
+            
+            // Simple deadlock detection for 2 threads and 2 resources
+            if (threadCount >= 2 && resourceCount >= 2) {
+                // Check for circular wait between threads
+                for (let i = 1; i <= threadCount; i++) {
+                    for (let j = i + 1; j <= threadCount; j++) {
+                        const t1 = `T${i}`;
+                        const t2 = `T${j}`;
+                        
+                        // Check if T1 holds what T2 wants and vice versa
+                        if (allocations[t1] === requests[t2] && allocations[t2] === requests[t1]) {
+                            deadlocks.push({
+                                description: `Circular wait between ${t1} and ${t2}`,
+                                cycle: [t1, allocations[t1], t2, allocations[t2], t1],
+                                code: `${t1} holds ${allocations[t1]} and requests ${requests[t1]}\n` +
+                                      `${t2} holds ${allocations[t2]} and requests ${requests[t2]}`
+                            });
+                        }
+                    }
+                }
+                
+                // More complex cycles for 3+ threads
+                if (threadCount >= 3) {
+                    // Check for longer cycles (T1 -> R1 -> T2 -> R2 -> T3 -> R3 -> T1)
+                    for (let i = 1; i <= threadCount; i++) {
+                        for (let j = 1; j <= threadCount; j++) {
+                            for (let k = 1; k <= threadCount; k++) {
+                                if (i !== j && j !== k && i !== k) {
+                                    const t1 = `T${i}`;
+                                    const t2 = `T${j}`;
+                                    const t3 = `T${k}`;
+                                    
+                                    if (allocations[t1] === requests[t2] && 
+                                        allocations[t2] === requests[t3] && 
+                                        allocations[t3] === requests[t1]) {
+                                        deadlocks.push({
+                                            description: `Circular wait between ${t1}, ${t2}, and ${t3}`,
+                                            cycle: [t1, allocations[t1], t2, allocations[t2], t3, allocations[t3], t1],
+                                            code: `${t1} holds ${allocations[t1]} and requests ${requests[t1]}\n` +
+                                                  `${t2} holds ${allocations[t2]} and requests ${requests[t2]}\n` +
+                                                  `${t3} holds ${allocations[t3]} and requests ${requests[t3]}`
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            return deadlocks;
+        }
+        
+        // ====== EVENT LISTENERS ======
+        document.getElementById("simulate-btn").addEventListener("click", simulateDeadlock);
+        
+        // Initial simulation
+        simulateDeadlock();
+    </script>
+</body>
+</html>
