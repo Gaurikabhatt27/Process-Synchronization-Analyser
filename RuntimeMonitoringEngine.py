@@ -157,3 +157,68 @@ class RuntimeMonitoringEngine:
         return "\n".join(output)
 
 
+class MonitoredLock:
+    """
+    Threading lock with built-in monitoring capabilities.
+    Usage:
+    lock = MonitoredLock("DescriptiveName")
+    with lock:
+        # critical section
+    """
+    
+    _lock_counter = 0
+    _counter_lock = threading.Lock()
+    
+    def __init__(self, name: str):
+        self.lock = threading.Lock()
+        self.name = name
+        self.monitor = RuntimeMonitoringEngine()
+        with MonitoredLock._counter_lock:
+            MonitoredLock._lock_counter += 1
+            self.lock_id = MonitoredLock._lock_counter
+        self.monitor.register_lock(self.lock_id, self.name)
+
+    def acquire(self, blocking=True, timeout=None) -> bool:
+        """Acquire the lock with deadlock detection"""
+        thread_id = threading.get_ident()
+        thread_name = threading.current_thread().name
+        self.monitor.register_thread(thread_id, thread_name)
+        
+        deadlock = self.monitor.pre_acquire(thread_id, self.lock_id)
+        if deadlock:
+            if blocking:
+                print("\nDEADLOCK DETECTED!")
+                for edge in deadlock:
+                    print(f"  - {edge}")
+                print()
+            return False
+        
+        acquired = False
+        try:
+            if timeout is not None:
+                acquired = self.lock.acquire(blocking=blocking, timeout=timeout)
+            else:
+                acquired = self.lock.acquire(blocking=blocking)
+        except Exception as e:
+            print(f"Lock acquisition error: {e}")
+            return False
+            
+        if acquired:
+            self.monitor.post_acquire(thread_id, self.lock_id)
+        return acquired
+
+    def release(self) -> None:
+        """Release the lock"""
+        thread_id = threading.get_ident()
+        self.monitor.release(thread_id, self.lock_id)
+        self.lock.release()
+
+    def __enter__(self):
+        self.acquire()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.release()
+
+
+
