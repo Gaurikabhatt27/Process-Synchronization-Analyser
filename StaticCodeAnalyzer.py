@@ -4,7 +4,7 @@ import sys
 from collections import defaultdict
 
 class SyncIssueDetector(ast.NodeVisitor):
-    def _init_(self):
+    def __init__(self):
         self.shared_resources = defaultdict(list)  # {variable_name: [access_locations]}
         self.locks = set()
         self.lock_acquires = defaultdict(list)  # {lock_name: [locations]}
@@ -35,7 +35,7 @@ class SyncIssueDetector(ast.NodeVisitor):
                 self.current_locks.discard(obj_name)
         self.generic_visit(node)
     
-    def detect_deadlock(self, lock_name):  #This is deadlock detection function
+    def detect_deadlock(self, lock_name):
         for acquired_lock in self.locks:
             if acquired_lock != lock_name:
                 self.deadlock_pairs.add((acquired_lock, lock_name))
@@ -64,7 +64,7 @@ def analyze_code(file_path):
     detector.visit(tree)
     detector.report_issues()
 
-if __name__ == "_main_":            #This is main function
+if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: python static_code_analyzer.py <source_code.py>")
         sys.exit(1)
