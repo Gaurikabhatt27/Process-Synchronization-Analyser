@@ -48,4 +48,49 @@ class DeadlockSimulator:
             resources[first_res].acquire()
             time.sleep(0.5)
             
-           
+            # Deadlock attempt
+            with self.lock:
+                thread_data['links'].append({
+                    'source': f'T{thread_id}',
+                    'target': f'R{second_res+1}',
+                    'type': 'waiting',
+                    'deadlock': True
+                })
+                thread_data['timeline'].append({
+                    'event': f'T{thread_id} waiting for R{second_res+1} (DEADLOCK)',
+                    'time': time.time()
+                })
+                
+                if not thread_data['deadlocks']:
+                    thread_data['deadlocks'].append({
+                        'description': f'Circular wait between {min(thread_count, resource_count)} threads/resources',
+                        'solution': 'Implement consistent lock ordering',
+                        'code': '''# Safe locking pattern:
+resources = sorted([resource_a, resource_b], key=id)
+for res in resources:
+    res.acquire()'''
+                    })
+            
+            resources[second_res].acquire()  # This will block
+            resources[second_res].release()
+            resources[first_res].release()
+
+        # Start threads
+        for i in range(thread_count):
+            threading.Thread(target=worker, args=(i+1,)).start()
+
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    if request.method == 'POST':
+        thread_count = int(request.form['thread_count'])
+        resource_count = int(request.form['resource_count'])
+        DeadlockSimulator().simulate_deadlock(thread_count, resource_count)
+    return render_template('dashboard.html')
+
+@app.route('/data')
+def get_data():
+    return jsonify(thread_data)
+
+if __name__ == '__main__':
+    app.run(port=5000, debug=True)
+    
